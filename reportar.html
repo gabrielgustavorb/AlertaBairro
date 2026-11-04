@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reportar problema - AlertaBairro</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-pagina="reportar">
+<main class="tela">
+  <h1>Reportar problema</h1>
+  <p class="sub">O que está acontecendo na sua comunidade?</p>
+
+  <h2>Categoria</h2>
+  <div class="cats" id="cats"></div>
+
+  <h2>Descrição</h2>
+  <textarea id="descricao" placeholder="Descreva o problema"></textarea>
+
+  <h2>Foto da ocorrência</h2>
+  <div class="linha">
+    <button type="button" class="btn sec" id="btnCamera">TIRAR FOTO</button>
+    <button type="button" class="btn sec" id="btnGaleria">GALERIA</button>
+  </div>
+  <!-- inputs escondidos: o "capture" abre a câmera no celular -->
+  <input type="file" id="inCamera" accept="image/*" capture="environment" hidden>
+  <input type="file" id="inGaleria" accept="image/*" hidden>
+  <img id="preview" alt="Foto escolhida">
+  <button type="button" class="del" id="removerFoto">Remover foto</button>
+
+  <h2>Localização</h2>
+  <button type="button" class="btn sec" id="btnLoc">USAR MINHA LOCALIZAÇÃO</button>
+  <div id="statusLoc"></div>
+  <div class="campo-manual">
+    <label class="rot" for="localizacao">Ou informe manualmente (referência e coordenadas)</label>
+    <input type="text" id="localizacao" placeholder="Ex.: Rua das Flores, em frente ao nº 100">
+    <div class="linha">
+      <input type="number" id="lat" step="any" placeholder="Latitude">
+      <input type="number" id="lng" step="any" placeholder="Longitude">
+    </div>
+  </div>
+
+  <div class="erro" id="erro"></div>
+  <button type="button" class="btn" id="publicar" style="margin-top:12px">PUBLICAR ALERTA</button>
+</main>
+<nav>
+  <a href="index.html"><span>🏠</span>Home</a>
+  <a href="mapa.html"><span>🗺️</span>Mapa</a>
+</nav>
+<script src="script.js"></script>
+</body>
+</html>
