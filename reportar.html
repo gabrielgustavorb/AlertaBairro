@@ -2,135 +2,96 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Reportar problema - AlertaBairro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <title>Reportar problema — AlertaBairro</title>
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body data-pagina="reportar">
+  <header class="topbar">
+    <div>
+      <strong class="brand">AlertaBairro</strong>
+      <small>Novo alerta</small>
+    </div>
+    <a class="icon-link" href="index.html" aria-label="Voltar">←</a>
+  </header>
 
-<main class="tela">
+  <main class="container narrow">
+    <section class="form-card">
+      <span class="eyebrow">NOVO REGISTRO</span>
+      <h1>Reportar problema</h1>
+      <p class="muted">Quanto mais completa a informação, mais útil será o alerta.</p>
 
-  <h1>Reportar problema</h1>
-  <p class="sub">O que está acontecendo na sua comunidade?</p>
+      <h2>1. Categoria</h2>
+      <div id="cats" class="categories"></div>
 
-  <h2>Categoria</h2>
-  <div class="cats" id="cats"></div>
+      <h2>2. Descrição</h2>
+      <textarea id="descricao" maxlength="500" rows="5" placeholder="Descreva o problema, por exemplo: poste apagado próximo à praça..."></textarea>
+      <div class="counter"><span id="contadorDescricao">0</span>/500</div>
 
-  <h2>Descrição</h2>
-  <textarea id="descricao" placeholder="Descreva o problema"></textarea>
+      <h2>3. Foto</h2>
+      <div class="photo-actions">
+        <button type="button" class="btn secondary" id="btnCamera">📷 Tirar foto</button>
+        <button type="button" class="btn secondary" id="btnGaleria">🖼️ Escolher foto</button>
+      </div>
 
-  <h2>Foto da ocorrência</h2>
+      <input id="inCamera" type="file" accept="image/*" capture="environment" hidden>
+      <input id="inGaleria" type="file" accept="image/*" hidden>
 
-  <div class="linha">
-    <button type="button" class="btn sec" id="btnCamera">
-      TIRAR FOTO
-    </button>
+      <img id="preview" class="preview" alt="Prévia da foto">
 
-    <button type="button" class="btn sec" id="btnGaleria">
-      GALERIA
-    </button>
-  </div>
+      <button type="button" class="btn danger-outline" id="removerFoto">
+        Remover foto
+      </button>
 
-  <!-- Inputs escondidos -->
-  <input
-    type="file"
-    id="inCamera"
-    accept="image/*"
-    capture="environment"
-    hidden
-  >
+      <h2>4. Localização</h2>
 
-  <input
-    type="file"
-    id="inGaleria"
-    accept="image/*"
-    hidden
-  >
+      <button type="button" class="btn secondary full" id="btnLoc">
+        📍 USAR MINHA LOCALIZAÇÃO
+      </button>
 
-  <img id="preview" alt="Foto escolhida">
+      <div id="statusLoc" class="status-msg" aria-live="polite"></div>
 
-  <button type="button" class="del" id="removerFoto">
-    Remover foto
-  </button>
+      <div class="or">
+        <span>OU INFORME O ENDEREÇO</span>
+      </div>
 
+      <div class="address-grid">
+        <label>CEP *
+          <input id="cep" inputmode="numeric" maxlength="9" placeholder="00000-000">
+        </label>
 
-  <!-- LOCALIZAÇÃO -->
-  <h2>Localização</h2>
+        <label>Rua *
+          <input id="rua" placeholder="Rua / Avenida">
+        </label>
 
-  <button type="button" class="btn sec" id="btnLoc">
-    USAR MINHA LOCALIZAÇÃO
-  </button>
+        <label>Número *
+          <input id="numero" inputmode="numeric" placeholder="Número">
+        </label>
 
-  <div id="statusLoc"></div>
+        <label>Bairro
+          <input id="bairro" placeholder="Bairro">
+        </label>
 
+        <label class="wide">Complemento
+          <input id="complemento" placeholder="Ex.: próximo à escola">
+        </label>
+      </div>
 
-  <!-- ENDEREÇO MANUAL -->
-  <div class="campo-manual">
+      <div id="erro" class="error" role="alert"></div>
 
-    <label class="rot">Ou informe o endereço</label>
+      <button type="button" class="btn primary big full" id="publicar">
+        PUBLICAR ALERTA
+      </button>
+    </section>
+  </main>
 
-    <input
-      type="text"
-      id="cep"
-      placeholder="CEP *"
-    >
+  <nav class="bottom-nav" aria-label="Navegação principal">
+    <a href="index.html">🏠<span>Início</span></a>
+    <a href="mapa.html">🗺️<span>Mapa</span></a>
+    <a class="active" href="reportar.html">➕<span>Reportar</span></a>
+  </nav>
 
-    <input
-      type="text"
-      id="rua"
-      placeholder="Rua *"
-    >
-
-    <input
-      type="text"
-      id="numero"
-      placeholder="Número *"
-    >
-
-    <input
-      type="text"
-      id="bairro"
-      placeholder="Bairro"
-    >
-
-    <input
-      type="text"
-      id="complemento"
-      placeholder="Complemento (opcional)"
-    >
-
-  </div>
-
-
-  <div class="erro" id="erro"></div>
-
-  <button
-    type="button"
-    class="btn"
-    id="publicar"
-    style="margin-top:12px"
-  >
-    PUBLICAR ALERTA
-  </button>
-
-</main>
-
-
-<nav>
-  <a href="index.html">
-    <span>🏠</span>
-    Home
-  </a>
-
-  <a href="mapa.html">
-    <span>🗺️</span>
-    Mapa
-  </a>
-</nav>
-
-
-<script src="script.js"></script>
-
+  <script src="script.js"></script>
 </body>
 </html>

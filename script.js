@@ -1,31 +1,40 @@
-/* ===== AlertaBairro - script.js =====
-   Um único arquivo para as três páginas.
-   Cada página diz quem ela é com <body data-pagina="...">.
-*/
+/* =========================================================
+   AlertaBairro — versão de demonstração/piloto
+   Armazenamento: localStorage
+   Mapa: Leaflet + OpenStreetMap
+   CEP: ViaCEP
+   Geocodificação: Photon com alternativa Nominatim
+   ========================================================= */
 
-// ---------- 1. DADOS ----------
 const CHAVE = "alertabairro_ocorrencias";
+const CHAVE_CONF = "alertabairro_confirmacoes";
 
 const CATEGORIAS = {
-  buraco:      { nome: "Buraco",      emoji: "🕳️" },
-  iluminacao:  { nome: "Iluminação",  emoji: "💡" },
-  lixo:        { nome: "Lixo",        emoji: "🗑️" },
-  alagamento:  { nome: "Alagamento",  emoji: "🌧️" },
-  outro:       { nome: "Outro",       emoji: "⚠️" }
+  buraco: { nome: "Buraco", emoji: "🕳️" },
+  iluminacao: { nome: "Iluminação", emoji: "💡" },
+  lixo: { nome: "Lixo", emoji: "🗑️" },
+  alagamento: { nome: "Alagamento", emoji: "🌧️" },
+  outro: { nome: "Outro", emoji: "⚠️" }
 };
 
-// ---------- FUNÇÕES GERAIS ----------
+const STATUS = ["Recebido", "Em análise", "Resolvido"];
+const $ = id => document.getElementById(id);
+
+// ---------- DADOS E FUNÇÕES GERAIS ----------
 
 function carregar() {
   try {
     const lista = JSON.parse(localStorage.getItem(CHAVE)) || [];
 
-    lista.forEach(o => {
-      o.confirmacoes = Number(o.confirmacoes) || 0;
-    });
-
-    return lista;
-  } catch (e) {
+    return lista.map(ocorrencia => ({
+      ...ocorrencia,
+      confirmacoes: Number(ocorrencia.confirmacoes) || 0,
+      status: STATUS.includes(ocorrencia.status)
+        ? ocorrencia.status
+        : "Recebido"
+    }));
+  } catch (erro) {
+    console.error("Não foi possível ler as ocorrências:", erro);
     return [];
   }
 }
@@ -34,236 +43,346 @@ function salvar(lista) {
   localStorage.setItem(CHAVE, JSON.stringify(lista));
 }
 
-function excluir(id) {
-  salvar(carregar().filter(o => o.id !== id));
-}
-
-// ---------- CONFIRMAÇÕES ----------
-
-const CHAVE_CONF = "alertabairro_confirmacoes";
-
 function idsConfirmados() {
   try {
     return JSON.parse(localStorage.getItem(CHAVE_CONF)) || [];
-  } catch (e) {
+  } catch (erro) {
     return [];
   }
 }
 
 function confirmar(id) {
-  const ja = idsConfirmados();
+  const jaConfirmados = idsConfirmados();
 
-  if (ja.includes(id)) return;
+  if (jaConfirmados.includes(id)) return false;
 
   const lista = carregar();
-  const o = lista.find(x => x.id === id);
+  const ocorrencia = lista.find(item => item.id === id);
 
-  if (!o) return;
+  if (!ocorrencia) return false;
 
-  o.confirmacoes += 1;
-
+  ocorrencia.confirmacoes += 1;
   salvar(lista);
 
-  ja.push(id);
-  localStorage.setItem(CHAVE_CONF, JSON.stringify(ja));
+  jaConfirmados.push(id);
+  localStorage.setItem(CHAVE_CONF, JSON.stringify(jaConfirmados));
+
+  return true;
 }
 
-function textoConfirmacoes(n) {
-  return `👍 ${n} ${n === 1 ? "confirmação" : "confirmações"}`;
+function excluir(id) {
+  salvar(carregar().filter(item => item.id !== id));
+
+  const restantes = idsConfirmados().filter(itemId => itemId !== id);
+
+  localStorage.setItem(CHAVE_CONF, JSON.stringify(restantes));
 }
 
-function blocoConfirmacao(o) {
-  const feito = idsConfirmados().includes(o.id);
-
-  return `
-    <div class="conf">${textoConfirmacoes(o.confirmacoes)}</div>
-
-    <button
-      class="btn-conf${feito ? " feito" : ""}"
-      data-confirmar="${o.id}"
-      ${feito ? "disabled" : ""}
-    >
-      ${feito ? "✓ Problema confirmado" : "👍 Confirmar problema"}
-    </button>
-  `;
+function escaparHTML(valor) {
+  const elemento = document.createElement("div");
+  elemento.textContent = valor ?? "";
+  return elemento.innerHTML;
 }
 
-// Evita que texto digitado vire HTML
-function esc(t) {
-  const d = document.createElement("div");
-  d.textContent = t || "";
-  return d.innerHTML;
+function novoId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// ---------- 2. HOME ----------
+function classeStatus(status) {
+  if (status === "Em análise") return "status-analise";
+  if (status === "Resolvido") return "status-resolvido";
+
+  return "status-recebido";
+}
+
+function etiquetaStatus(status) {
+  return `<span class="status-pill ${classeStatus(status)}">${escaparHTML(status)}</span>`;
+}
+
+function atualizarStatus(id, novoStatus) {
+  if (!STATUS.includes(novoStatus)) return;
+
+  const lista = carregar();
+  const ocorrencia = lista.find(item => item.id === id);
+
+  if (!ocorrencia) return;
+
+  ocorrencia.status = novoStatus;
+  salvar(lista);
+}
+
+// ---------- TELA INICIAL ----------
 
 function iniciarHome() {
-  const lista = document.getElementById("lista");
+  const listaElemento = $("lista");
+  const campoBusca = $("busca");
+  const filtroCategoria = $("filtroCategoria");
+  const filtroStatus = $("filtroStatus");
+  const estatisticas = $("estatisticas");
 
-  function desenhar() {
-    const ocorrencias = carregar().slice().sort((a, b) => {
-      if (b.confirmacoes !== a.confirmacoes) {
-        return b.confirmacoes - a.confirmacoes;
-      }
+  function desenharEstatisticas() {
+    const ocorrencias = carregar();
 
-      return String(b.id).localeCompare(String(a.id));
-    });
+    const totalConfirmacoes = ocorrencias.reduce(
+      (soma, item) => soma + item.confirmacoes,
+      0
+    );
 
-    if (ocorrencias.length === 0) {
-      lista.innerHTML =
-        '<div class="vazio">Nenhum alerta por aqui ainda.<br>Toque em "+ Reportar problema" para registrar o primeiro.</div>';
+    const resolvidos = ocorrencias.filter(
+      item => item.status === "Resolvido"
+    ).length;
 
-      return;
-    }
+    const emAnalise = ocorrencias.filter(
+      item => item.status === "Em análise"
+    ).length;
 
-    lista.innerHTML = ocorrencias.map(o => `
-      <article class="card">
+    estatisticas.innerHTML = `
+      <div class="stat">
+        <strong>${ocorrencias.length}</strong>
+        <span>ocorrências</span>
+      </div>
 
-        <div class="topo">
-          <span class="emoji">${o.emoji}</span>
-          <b>${esc(o.categoria)}</b>
-        </div>
+      <div class="stat">
+        <strong>${totalConfirmacoes}</strong>
+        <span>confirmações</span>
+      </div>
 
-        <p>${esc(o.descricao)}</p>
+      <div class="stat">
+        <strong>${resolvidos}</strong>
+        <span>resolvidos</span>
+      </div>
 
-        <small>
-          📍 ${esc(o.localizacao || "Localização não informada")}
-          (${Number(o.latitude).toFixed(5)}, ${Number(o.longitude).toFixed(5)})
-        </small>
-
-        ${o.foto ? `<img src="${o.foto}" alt="Foto da ocorrência">` : ""}
-
-        ${blocoConfirmacao(o)}
-
-        <button class="del" data-id="${o.id}">
-          Excluir
-        </button>
-
-      </article>
-    `).join("");
+      <div class="stat">
+        <strong>${emAnalise}</strong>
+        <span>em análise</span>
+      </div>
+    `;
   }
 
-  lista.addEventListener("click", e => {
+  function desenhar() {
+    const termo = campoBusca.value.trim().toLowerCase();
+    const categoria = filtroCategoria.value;
+    const status = filtroStatus.value;
 
-    if (e.target.dataset.confirmar) {
-      confirmar(e.target.dataset.confirmar);
+    const ocorrencias = carregar()
+      .filter(item => {
+        const texto = `${item.categoria} ${item.descricao} ${item.localizacao}`.toLowerCase();
+
+        return (!termo || texto.includes(termo))
+          && (categoria === "todas" || item.categoria === categoria)
+          && (status === "todos" || item.status === status);
+      })
+      .sort((a, b) => {
+        if (b.confirmacoes !== a.confirmacoes) {
+          return b.confirmacoes - a.confirmacoes;
+        }
+
+        return String(b.id).localeCompare(String(a.id));
+      });
+
+    desenharEstatisticas();
+
+    if (ocorrencias.length === 0) {
+      listaElemento.innerHTML = `
+        <div class="vazio">
+          Nenhum alerta encontrado com esses filtros.
+        </div>
+      `;
+
+      return;
+    }
+
+    listaElemento.innerHTML = ocorrencias.map(item => {
+      const jaConfirmou = idsConfirmados().includes(item.id);
+
+      return `
+        <article class="card">
+
+          <div class="topo">
+            <span class="emoji">${item.emoji}</span>
+
+            <div>
+              <b>${escaparHTML(item.categoria)}</b><br>
+              ${etiquetaStatus(item.status)}
+            </div>
+          </div>
+
+          <p>${escaparHTML(item.descricao)}</p>
+
+          <small>
+            📍 ${escaparHTML(item.localizacao || "Localização não informada")}
+          </small>
+
+          ${item.foto
+            ? `<img src="${item.foto}" alt="Foto da ocorrência">`
+            : ""
+          }
+
+          <div class="conf">
+            👍 ${item.confirmacoes}
+            ${item.confirmacoes === 1 ? "confirmação" : "confirmações"}
+          </div>
+
+          <div class="card-actions">
+
+            <button
+              class="btn-conf ${jaConfirmou ? "feito" : ""}"
+              data-confirmar="${item.id}"
+              ${jaConfirmou ? "disabled" : ""}
+            >
+              ${jaConfirmou ? "✓ Confirmado" : "👍 Confirmar problema"}
+            </button>
+
+            <select data-status="${item.id}" aria-label="Alterar status">
+              ${STATUS.map(statusItem => `
+                <option
+                  value="${statusItem}"
+                  ${statusItem === item.status ? "selected" : ""}
+                >
+                  ${statusItem}
+                </option>
+              `).join("")}
+            </select>
+
+          </div>
+
+          <button class="del" data-excluir="${item.id}">
+            Excluir
+          </button>
+
+        </article>
+      `;
+    }).join("");
+  }
+
+  [campoBusca, filtroCategoria, filtroStatus].forEach(elemento => {
+    elemento.addEventListener("input", desenhar);
+    elemento.addEventListener("change", desenhar);
+  });
+
+  listaElemento.addEventListener("click", evento => {
+    const botaoConfirmar = evento.target.closest("[data-confirmar]");
+
+    if (botaoConfirmar) {
+      confirmar(botaoConfirmar.dataset.confirmar);
       desenhar();
       return;
     }
 
-    const id = e.target.dataset.id;
+    const botaoExcluir = evento.target.closest("[data-excluir]");
 
-    if (id && confirm("Excluir este alerta?")) {
-      excluir(id);
+    if (botaoExcluir && confirm("Excluir esta ocorrência?")) {
+      excluir(botaoExcluir.dataset.excluir);
       desenhar();
     }
+  });
+
+  listaElemento.addEventListener("change", evento => {
+    const seletor = evento.target.closest("[data-status]");
+
+    if (!seletor) return;
+
+    atualizarStatus(seletor.dataset.status, seletor.value);
+    desenhar();
   });
 
   desenhar();
 }
 
-// ---------- 3. REPORTAR ----------
+// ---------- TELA DE REGISTRO ----------
 
 function iniciarReportar() {
-
   let categoriaEscolhida = null;
   let foto = null;
+  let usouGPS = false;
+  let latitude = null;
+  let longitude = null;
 
-  // Localização atual do aparelho
-  let usouLocalizacaoAtual = false;
-  let latitudeAtual = null;
-  let longitudeAtual = null;
+  // Cria os botões de categoria.
+  $("cats").innerHTML = Object.entries(CATEGORIAS).map(([chave, categoria]) => `
+    <button type="button" class="cat" data-cat="${chave}">
+      <span>${categoria.emoji}</span>${categoria.nome}
+    </button>
+  `).join("");
 
-  const $ = id => document.getElementById(id);
+  $("cats").addEventListener("click", evento => {
+    const botao = evento.target.closest("[data-cat]");
 
-  // ---------- CATEGORIAS ----------
+    if (!botao) return;
 
-  $("cats").innerHTML = Object.entries(CATEGORIAS)
-    .map(([k, c]) =>
-      `<button type="button" class="cat" data-cat="${k}">
-        <span>${c.emoji}</span>${c.nome}
-      </button>`
-    )
-    .join("");
+    categoriaEscolhida = botao.dataset.cat;
 
-  $("cats").addEventListener("click", e => {
-
-    const b = e.target.closest(".cat");
-
-    if (!b) return;
-
-    categoriaEscolhida = b.dataset.cat;
-
-    document.querySelectorAll(".cat").forEach(x => {
-      x.classList.toggle("ativa", x === b);
+    document.querySelectorAll(".cat").forEach(elemento => {
+      elemento.classList.toggle("ativa", elemento === botao);
     });
   });
 
-  // ---------- FOTO ----------
-
+  // Redimensiona a foto antes de guardá-la no navegador.
   function lerFoto(arquivo) {
-
     if (!arquivo) return;
+
+    if (!arquivo.type.startsWith("image/")) {
+      $("erro").textContent = "Selecione um arquivo de imagem.";
+      return;
+    }
 
     const leitor = new FileReader();
 
     leitor.onload = () => {
+      const imagem = new Image();
 
-      const img = new Image();
-
-      img.onload = () => {
+      imagem.onload = () => {
+        const tamanhoMaximo = 1000;
 
         const escala = Math.min(
           1,
-          800 / Math.max(img.width, img.height)
+          tamanhoMaximo / Math.max(imagem.width, imagem.height)
         );
 
-        const c = document.createElement("canvas");
+        const canvas = document.createElement("canvas");
 
-        c.width = img.width * escala;
-        c.height = img.height * escala;
+        canvas.width = Math.round(imagem.width * escala);
+        canvas.height = Math.round(imagem.height * escala);
 
-        c.getContext("2d").drawImage(
-          img,
+        canvas.getContext("2d").drawImage(
+          imagem,
           0,
           0,
-          c.width,
-          c.height
+          canvas.width,
+          canvas.height
         );
 
-        foto = c.toDataURL("image/jpeg", 0.7);
+        foto = canvas.toDataURL("image/jpeg", 0.72);
 
         $("preview").src = foto;
         $("preview").style.display = "block";
         $("removerFoto").style.display = "inline-block";
       };
 
-      img.src = leitor.result;
+      imagem.onerror = () => {
+        $("erro").textContent = "Não foi possível carregar essa imagem.";
+      };
+
+      imagem.src = leitor.result;
+    };
+
+    leitor.onerror = () => {
+      $("erro").textContent = "Não foi possível ler o arquivo escolhido.";
     };
 
     leitor.readAsDataURL(arquivo);
   }
 
-  $("btnCamera").onclick = () => {
-    $("inCamera").click();
-  };
+  $("btnCamera").onclick = () => $("inCamera").click();
+  $("btnGaleria").onclick = () => $("inGaleria").click();
 
-  $("btnGaleria").onclick = () => {
-    $("inGaleria").click();
-  };
-
-  $("inCamera").onchange = e => {
-    lerFoto(e.target.files[0]);
-  };
-
-  $("inGaleria").onchange = e => {
-    lerFoto(e.target.files[0]);
-  };
+  $("inCamera").onchange = evento => lerFoto(evento.target.files[0]);
+  $("inGaleria").onchange = evento => lerFoto(evento.target.files[0]);
 
   $("removerFoto").onclick = () => {
-
     foto = null;
 
+    $("preview").src = "";
     $("preview").style.display = "none";
     $("removerFoto").style.display = "none";
 
@@ -271,56 +390,45 @@ function iniciarReportar() {
     $("inGaleria").value = "";
   };
 
-  // ---------- LOCALIZAÇÃO ATUAL ----------
+  $("descricao").addEventListener("input", () => {
+    $("contadorDescricao").textContent = $("descricao").value.length;
+  });
 
+  // Seleciona a localização do dispositivo.
   $("btnLoc").onclick = () => {
-
-    const st = $("statusLoc");
+    const status = $("statusLoc");
 
     if (!navigator.geolocation) {
-
-      st.textContent =
-        "Seu navegador não permite geolocalização. Informe manualmente.";
-
+      status.textContent = "Seu navegador não permite geolocalização. Informe o endereço abaixo.";
       return;
     }
 
-    st.className = "";
-    st.textContent = "Buscando sua localização...";
+    status.className = "status-msg";
+    status.textContent = "Buscando sua localização...";
 
     navigator.geolocation.getCurrentPosition(
+      posicao => {
+        latitude = posicao.coords.latitude;
+        longitude = posicao.coords.longitude;
+        usouGPS = true;
 
-      pos => {
+        status.className = "status-msg ok";
 
-        latitudeAtual = pos.coords.latitude;
-        longitudeAtual = pos.coords.longitude;
-
-        usouLocalizacaoAtual = true;
-
-        st.className = "ok";
-        st.textContent = "✓ Localização atual selecionada";
-
-        console.log("Latitude:", latitudeAtual);
-        console.log("Longitude:", longitudeAtual);
-        console.log(
-          "Precisão:",
-          pos.coords.accuracy,
-          "metros"
-        );
+        status.textContent =
+          `✓ Localização selecionada (precisão aproximada: ${Math.round(posicao.coords.accuracy)} m)`;
       },
 
       erro => {
+        console.error("Erro de geolocalização:", erro);
 
-        console.error("Erro de localização:", erro);
+        usouGPS = false;
+        latitude = null;
+        longitude = null;
 
-        usouLocalizacaoAtual = false;
-        latitudeAtual = null;
-        longitudeAtual = null;
+        status.className = "status-msg";
 
-        st.className = "";
-
-        st.textContent =
-          "Não foi possível obter a localização. Informe o endereço abaixo.";
+        status.textContent =
+          "Não foi possível obter sua localização. Informe o endereço abaixo.";
       },
 
       {
@@ -331,542 +439,416 @@ function iniciarReportar() {
     );
   };
 
-  // ---------- ENDEREÇO MANUAL ----------
-  // Se o usuário começar a preencher o endereço,
-  // consideramos que ele quer usar o endereço manual.
-
+  // Ao editar o endereço, troca a opção de GPS pela localização manual.
   ["cep", "rua", "numero", "bairro", "complemento"].forEach(id => {
-
     $(id).addEventListener("input", () => {
-
-      usouLocalizacaoAtual = false;
-      latitudeAtual = null;
-      longitudeAtual = null;
+      usouGPS = false;
+      latitude = null;
+      longitude = null;
 
       $("statusLoc").textContent = "";
-      $("statusLoc").className = "";
+      $("statusLoc").className = "status-msg";
     });
   });
 
-  // ---------- PUBLICAR ----------
+  // Formata o CEP como 00000-000.
+  $("cep").addEventListener("input", () => {
+    let cep = $("cep").value.replace(/\D/g, "").slice(0, 8);
 
+    if (cep.length > 5) {
+      cep = `${cep.slice(0, 5)}-${cep.slice(5)}`;
+    }
+
+    $("cep").value = cep;
+  });
+
+  // Procura coordenadas por endereço: primeiro Photon, depois Nominatim.
+  async function buscarCoordenadas(endereco) {
+    const urlPhoton =
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(endereco)}&limit=1`;
+
+    try {
+      const respostaPhoton = await fetch(urlPhoton);
+
+      if (respostaPhoton.ok) {
+        const dadosPhoton = await respostaPhoton.json();
+
+        const coordenadas =
+          dadosPhoton?.features?.[0]?.geometry?.coordinates;
+
+        if (Array.isArray(coordenadas) && coordenadas.length >= 2) {
+          return {
+            latitude: Number(coordenadas[1]),
+            longitude: Number(coordenadas[0])
+          };
+        }
+      }
+    } catch (erro) {
+      console.warn(
+        "Photon não respondeu; tentando serviço alternativo.",
+        erro
+      );
+    }
+
+    const parametros = new URLSearchParams({
+      q: endereco,
+      format: "jsonv2",
+      limit: "1",
+      addressdetails: "1",
+      countrycodes: "br"
+    });
+
+    const respostaNominatim = await fetch(
+      `https://nominatim.openstreetmap.org/search?${parametros}`
+    );
+
+    if (respostaNominatim.ok) {
+      const resultados = await respostaNominatim.json();
+
+      if (resultados.length > 0) {
+        return {
+          latitude: Number(resultados[0].lat),
+          longitude: Number(resultados[0].lon)
+        };
+      }
+    }
+
+    throw new Error(
+      "Não foi possível encontrar esse endereço no mapa. Confira o CEP, a rua, o número e o bairro."
+    );
+  }
+
+  // Publica uma ocorrência com GPS ou endereço informado.
   $("publicar").onclick = async () => {
-
-    const descricao = $("descricao").value.trim();
-
-    const cep = $("cep").value.trim();
-    const rua = $("rua").value.trim();
-    const numero = $("numero").value.trim();
-    const bairro = $("bairro").value.trim();
-    const complemento = $("complemento").value.trim();
-
-    const erro = t => {
-      $("erro").textContent = t;
+    const mostrarErro = mensagem => {
+      $("erro").textContent = mensagem;
     };
 
     $("erro").textContent = "";
 
-    // ---------- VALIDAÇÕES BÁSICAS ----------
+    const descricao = $("descricao").value.trim();
 
     if (!categoriaEscolhida) {
-      return erro("Escolha uma categoria.");
+      return mostrarErro("Escolha uma categoria.");
     }
 
     if (!descricao) {
-      return erro("Escreva uma descrição.");
+      return mostrarErro("Escreva uma descrição.");
     }
 
-    // ---------- LOCALIZAÇÃO ATUAL ----------
+    const botaoPublicar = $("publicar");
 
-    if (usouLocalizacaoAtual) {
+    botaoPublicar.disabled = true;
+    botaoPublicar.textContent = "PUBLICANDO...";
 
-      if (
-        latitudeAtual === null ||
-        longitudeAtual === null
-      ) {
-        return erro(
-          "Não foi possível obter sua localização. Tente novamente."
-        );
-      }
+    try {
+      let localizacao = "Minha localização atual";
 
-    }
+      if (!usouGPS) {
+        const cep = $("cep").value.replace(/\D/g, "");
+        const rua = $("rua").value.trim();
+        const numero = $("numero").value.trim();
+        const bairroDigitado = $("bairro").value.trim();
+        const complemento = $("complemento").value.trim();
 
-    // ---------- ENDEREÇO MANUAL ----------
-
-    else {
-
-      if (!cep) {
-        return erro("Informe o CEP.");
-      }
-
-      if (!rua) {
-        return erro("Informe a rua.");
-      }
-
-      if (!numero) {
-        return erro("Informe o número.");
-      }
-
-      // Remove caracteres que não sejam números do CEP
-      const cepLimpo = cep.replace(/\D/g, "");
-
-      if (cepLimpo.length !== 8) {
-        return erro("Informe um CEP válido.");
-      }
-
-      // ---------- CONSULTA DO CEP ----------
-
-      $("publicar").disabled = true;
-      $("publicar").textContent = "LOCALIZANDO...";
-
-      try {
-
-        const respostaCep = await fetch(
-          `https://viacep.com.br/ws/${cepLimpo}/json/`
-        );
-
-        if (!respostaCep.ok) {
-          throw new Error("Falha ao consultar CEP.");
+        if (cep.length !== 8) {
+          throw new Error("Informe um CEP válido.");
         }
 
-        const dadosCep = await respostaCep.json();
+        if (!rua) {
+          throw new Error("Informe a rua.");
+        }
 
-        if (dadosCep.erro) {
+        if (!numero) {
+          throw new Error("Informe o número.");
+        }
+
+        botaoPublicar.textContent = "CONSULTANDO CEP...";
+
+        const respostaCEP = await fetch(
+          `https://viacep.com.br/ws/${cep}/json/`
+        );
+
+        if (!respostaCEP.ok) {
+          throw new Error("Não foi possível consultar o CEP.");
+        }
+
+        const dadosCEP = await respostaCEP.json();
+
+        if (dadosCEP.erro) {
           throw new Error("CEP não encontrado.");
         }
 
-        // ---------- MONTA ENDEREÇO COMPLETO ----------
+        const cidade = dadosCEP.localidade || "";
+        const estado = dadosCEP.uf || "";
+        const bairro = bairroDigitado || dadosCEP.bairro || "";
+        const ruaFinal = rua || dadosCEP.logradouro || "";
 
-        const cidade = dadosCep.localidade || "";
-        const estado = dadosCep.uf || "";
-
-        const bairroFinal =
-          bairro || dadosCep.bairro || "";
-
-        const ruaFinal =
-          rua || dadosCep.logradouro || "";
-
-        const partesEndereco = [
-          `${ruaFinal}, ${numero}`,
-          bairroFinal,
-          cidade,
-          estado,
-          cepLimpo,
-          "Brasil"
-        ].filter(Boolean);
-
-        const enderecoCompleto =
-          partesEndereco.join(", ");
-
-        console.log(
-          "Endereço para localização:",
-          enderecoCompleto
-        );
-
-        // ---------- GEOCODIFICAÇÃO ----------
-
-        // PRIMEIRA TENTATIVA:
-        // usa o Photon para localizar o endereço
-
-        const enderecoBusca = [
+        const endereco = [
           `${ruaFinal} ${numero}`,
-          bairroFinal,
+          bairro,
           cidade,
           estado,
           "Brasil"
         ].filter(Boolean).join(", ");
 
-        const parametrosPhoton = new URLSearchParams({
-          q: enderecoBusca,
-          limit: "1"
-        });
+        botaoPublicar.textContent = "LOCALIZANDO NO MAPA...";
 
-        const respostaPhoton = await fetch(
-          `https://photon.komoot.io/api/?${parametrosPhoton.toString()}`
-        );
+        let coordenadas;
 
-        if (respostaPhoton.ok) {
-
-          const dadosPhoton = await respostaPhoton.json();
-
-          if (
-            dadosPhoton.features &&
-            dadosPhoton.features.length > 0 &&
-            dadosPhoton.features[0].geometry &&
-            Array.isArray(
-              dadosPhoton.features[0].geometry.coordinates
-            )
-          ) {
-
-            const coordenadas =
-              dadosPhoton.features[0].geometry.coordinates;
-
-            longitudeAtual =
-              parseFloat(coordenadas[0]);
-
-            latitudeAtual =
-              parseFloat(coordenadas[1]);
-          }
-        }
-
-        // SEGUNDA TENTATIVA:
-        // se o Photon não encontrar, tenta o Nominatim
-
-        if (
-          latitudeAtual === null ||
-          longitudeAtual === null ||
-          isNaN(latitudeAtual) ||
-          isNaN(longitudeAtual)
-        ) {
-
-          const parametrosNominatim = new URLSearchParams({
-            q: enderecoBusca,
-            format: "jsonv2",
-            limit: "1",
-            addressdetails: "1",
-            countrycodes: "br"
-          });
-
-          const respostaNominatim = await fetch(
-            `https://nominatim.openstreetmap.org/search?${parametrosNominatim.toString()}`
-          );
-
-          if (respostaNominatim.ok) {
-
-            const resultadosNominatim =
-              await respostaNominatim.json();
-
-            if (resultadosNominatim.length) {
-
-              latitudeAtual =
-                parseFloat(resultadosNominatim[0].lat);
-
-              longitudeAtual =
-                parseFloat(resultadosNominatim[0].lon);
-            }
-          }
-        }
-
-        // TERCEIRA TENTATIVA:
-        // procura somente pela rua, bairro e cidade
-
-        if (
-          latitudeAtual === null ||
-          longitudeAtual === null ||
-          isNaN(latitudeAtual) ||
-          isNaN(longitudeAtual)
-        ) {
-
+        try {
+          coordenadas = await buscarCoordenadas(endereco);
+        } catch (erroCompleto) {
+          // Segunda pesquisa sem número: alguns serviços não localizam o imóvel exato.
           const enderecoSemNumero = [
             ruaFinal,
-            bairroFinal,
+            bairro,
             cidade,
             estado,
             "Brasil"
           ].filter(Boolean).join(", ");
 
-          const parametrosRua = new URLSearchParams({
-            q: enderecoSemNumero,
-            format: "jsonv2",
-            limit: "1",
-            addressdetails: "1",
-            countrycodes: "br"
-          });
-
-          const respostaRua = await fetch(
-            `https://nominatim.openstreetmap.org/search?${parametrosRua.toString()}`
-          );
-
-          if (respostaRua.ok) {
-
-            const resultadosRua =
-              await respostaRua.json();
-
-            if (resultadosRua.length) {
-
-              latitudeAtual =
-                parseFloat(resultadosRua[0].lat);
-
-              longitudeAtual =
-                parseFloat(resultadosRua[0].lon);
-            }
-          }
+          coordenadas = await buscarCoordenadas(enderecoSemNumero);
         }
 
-        // Se nenhuma tentativa encontrou o endereço
+        latitude = coordenadas.latitude;
+        longitude = coordenadas.longitude;
 
-        if (
-          latitudeAtual === null ||
-          longitudeAtual === null ||
-          isNaN(latitudeAtual) ||
-          isNaN(longitudeAtual)
-        ) {
-          throw new Error(
-            "Não foi possível encontrar esse endereço no mapa. Confira o CEP, a rua, o número e o bairro."
-          );
-        }
-
-        usouLocalizacaoAtual = false;
-
-        // ---------- ENDEREÇO QUE SERÁ MOSTRADO ----------
-
-        const localizacao = [
+        localizacao = [
           `${ruaFinal}, ${numero}`,
-          bairroFinal,
-          `${cidade} - ${estado}`
-        ]
-          .filter(Boolean)
-          .join(", ");
-
-        // ---------- SALVAR OCORRÊNCIA ----------
-
-        const cat = CATEGORIAS[categoriaEscolhida];
-
-        const nova = {
-
-          id:
-            Date.now().toString(36) +
-            Math.random().toString(36).slice(2, 6),
-
-          categoria: cat.nome,
-
-          emoji: cat.emoji,
-
-          descricao: descricao,
-
-          latitude: latitudeAtual,
-
-          longitude: longitudeAtual,
-
-          foto: foto,
-
-          localizacao: localizacao
-        };
-
-        try {
-
-          const lista = carregar();
-
-          lista.push(nova);
-
-          salvar(lista);
-
-        } catch (e) {
-
-          $("publicar").disabled = false;
-          $("publicar").textContent = "PUBLICAR ALERTA";
-
-          return erro(
-            "Não foi possível salvar (armazenamento cheio). Tente sem foto ou exclua alertas antigos."
-          );
-        }
-
-        location.href = "index.html";
-
-      } catch (e) {
-
-        console.error(e);
-
-        $("publicar").disabled = false;
-        $("publicar").textContent = "PUBLICAR ALERTA";
-
-        return erro(
-          e.message ||
-          "Não foi possível localizar esse endereço."
-        );
+          bairro,
+          `${cidade} - ${estado}`,
+          complemento
+        ].filter(Boolean).join(", ");
       }
 
-      return;
-    }
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        throw new Error("A localização não possui coordenadas válidas.");
+      }
 
-    // ---------- SALVAR COM LOCALIZAÇÃO ATUAL ----------
+      const categoria = CATEGORIAS[categoriaEscolhida];
 
-    const cat = CATEGORIAS[categoriaEscolhida];
+      const novaOcorrencia = {
+        id: novoId(),
+        categoria: categoria.nome,
+        emoji: categoria.emoji,
+        descricao,
+        latitude,
+        longitude,
+        foto,
+        localizacao,
+        complemento: $("complemento").value.trim(),
+        status: "Recebido",
+        confirmacoes: 0,
+        criadoEm: new Date().toISOString()
+      };
 
-    const nova = {
+      const ocorrencias = carregar();
 
-      id:
-        Date.now().toString(36) +
-        Math.random().toString(36).slice(2, 6),
+      ocorrencias.push(novaOcorrencia);
 
-      categoria: cat.nome,
+      salvar(ocorrencias);
 
-      emoji: cat.emoji,
+      window.location.href = "index.html";
 
-      descricao: descricao,
+    } catch (erro) {
+      console.error("Erro ao publicar ocorrência:", erro);
 
-      latitude: latitudeAtual,
-
-      longitude: longitudeAtual,
-
-      foto: foto,
-
-      localizacao: "Minha localização atual"
-    };
-
-    try {
-
-      const lista = carregar();
-
-      lista.push(nova);
-
-      salvar(lista);
-
-    } catch (e) {
-
-      return erro(
-        "Não foi possível salvar (armazenamento cheio). Tente sem foto ou exclua alertas antigos."
+      mostrarErro(
+        erro.message || "Não foi possível publicar o alerta."
       );
-    }
 
-    location.href = "index.html";
+      botaoPublicar.disabled = false;
+      botaoPublicar.textContent = "PUBLICAR ALERTA";
+    }
   };
 }
 
-// ---------- 4. MAPA ----------
+// ---------- MAPA DE OCORRÊNCIAS ----------
 
 function iniciarMapa() {
+  const mapa = L.map("mapa").setView([-5.7945, -35.211], 12);
 
-  const mapa = L
-    .map("mapa")
-    .setView([-14.2, -51.9], 4);
+  const grupoMarcadores = L.featureGroup().addTo(mapa);
 
-  L.tileLayer(
-    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-      maxZoom: 19,
-      attribution: "© OpenStreetMap"
-    }
-  ).addTo(mapa);
+  let marcadorUsuario = null;
 
-  const ocorrencias = carregar();
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "© OpenStreetMap"
+  }).addTo(mapa);
 
-  const pontos = [];
+  function desenharMarcadores() {
+    grupoMarcadores.clearLayers();
 
-  const marcadores = {};
+    const categoria = $("mapFiltroCategoria").value;
+    const status = $("mapFiltroStatus").value;
 
-  const htmlPopup = o => `
-    <b>${o.emoji} ${esc(o.categoria)}</b>
-    <br>
-    ${esc(o.descricao)}
+    const ocorrencias = carregar().filter(item =>
+      (categoria === "todas" || item.categoria === categoria)
+      && (status === "todos" || item.status === status)
+    );
 
-    ${blocoConfirmacao(o)}
+    ocorrencias.forEach(item => {
+      const icone = L.divIcon({
+        className: "",
 
-    <button class="del" data-id="${o.id}">
-      Excluir
-    </button>
-  `;
+        html: `
+          <div class="marcador">
+            ${item.emoji}
+            <span class="contador-mapa">${item.confirmacoes}</span>
+          </div>
+        `,
 
-  ocorrencias.forEach(o => {
+        iconSize: [42, 42],
+        iconAnchor: [21, 21]
+      });
 
-    const icone = L.divIcon({
+      const jaConfirmou = idsConfirmados().includes(item.id);
 
-      className: "",
+      const popup = `
+        <div class="popup-card">
 
-      html: `
-        <div class="marcador">
-          ${o.emoji}
-          <span class="contador-mapa">
-            ${o.confirmacoes}
-          </span>
+          <h3>${item.emoji} ${escaparHTML(item.categoria)}</h3>
+
+          ${etiquetaStatus(item.status)}
+
+          <p>${escaparHTML(item.descricao)}</p>
+
+          <div class="popup-location">
+            📍 ${escaparHTML(item.localizacao || "Localização não informada")}
+          </div>
+
+          ${item.foto
+            ? `<img class="popup-photo" src="${item.foto}" alt="Foto da ocorrência">`
+            : ""
+          }
+
+          <div class="conf">
+            👍 ${item.confirmacoes}
+            ${item.confirmacoes === 1 ? "confirmação" : "confirmações"}
+          </div>
+
+          <button
+            class="btn-conf ${jaConfirmou ? "feito" : ""}"
+            data-map-confirmar="${item.id}"
+            ${jaConfirmou ? "disabled" : ""}
+          >
+            ${jaConfirmou ? "✓ Confirmado" : "👍 Confirmar problema"}
+          </button>
+
+          <button class="del" data-map-excluir="${item.id}">
+            Excluir
+          </button>
+
         </div>
-      `,
+      `;
 
-      iconSize: [42, 42],
-
-      iconAnchor: [21, 21]
-    });
-
-    marcadores[o.id] = L
-      .marker(
-        [o.latitude, o.longitude],
+      L.marker(
+        [item.latitude, item.longitude],
         { icon: icone }
       )
-      .addTo(mapa)
-      .bindPopup(htmlPopup(o));
+        .bindPopup(popup)
+        .addTo(grupoMarcadores);
+    });
 
-    pontos.push([
-      o.latitude,
-      o.longitude
-    ]);
-  });
+    if (ocorrencias.length === 1) {
+      mapa.setView(
+        [ocorrencias[0].latitude, ocorrencias[0].longitude],
+        16
+      );
 
-  if (pontos.length === 1) {
-
-    mapa.setView(
-      pontos[0],
-      16
-    );
-
-  } else if (pontos.length > 1) {
-
-    mapa.fitBounds(
-      pontos,
-      {
-        padding: [60, 60]
-      }
-    );
+    } else if (ocorrencias.length > 1) {
+      mapa.fitBounds(grupoMarcadores.getBounds(), {
+        padding: [60, 60],
+        maxZoom: 16
+      });
+    }
   }
 
-  document
-    .getElementById("mapa")
-    .addEventListener("click", e => {
+  $("mapFiltroCategoria").addEventListener(
+    "change",
+    desenharMarcadores
+  );
 
-      // Confirmar ocorrência
-      const idConf =
-        e.target.dataset &&
-        e.target.dataset.confirmar;
+  $("mapFiltroStatus").addEventListener(
+    "change",
+    desenharMarcadores
+  );
 
-      if (idConf) {
+  $("btnMinhaPosicao").onclick = () => {
+    if (!navigator.geolocation) {
+      alert("Seu navegador não permite geolocalização.");
+      return;
+    }
 
-        confirmar(idConf);
-
-        const o =
-          carregar().find(
-            x => x.id === idConf
-          );
-
-        if (o) {
-
-          marcadores[idConf]
-            .setPopupContent(
-              htmlPopup(o)
-            );
+    navigator.geolocation.getCurrentPosition(
+      posicao => {
+        if (marcadorUsuario) {
+          mapa.removeLayer(marcadorUsuario);
         }
 
-        return;
+        marcadorUsuario = L.circleMarker(
+          [posicao.coords.latitude, posicao.coords.longitude],
+          { radius: 9 }
+        )
+          .addTo(mapa)
+          .bindPopup("📍 Você está aqui")
+          .openPopup();
+
+        mapa.setView(
+          [posicao.coords.latitude, posicao.coords.longitude],
+          16
+        );
+      },
+
+      erro => {
+        console.error("Não foi possível obter a posição:", erro);
+
+        alert(
+          "Não foi possível obter sua localização. Confira a permissão do navegador."
+        );
+      },
+
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
       }
+    );
+  };
 
-      // Excluir ocorrência
-      const id =
-        e.target.dataset &&
-        e.target.dataset.id;
+  // Os botões dos popups são tratados no elemento do mapa.
+  $("mapa").addEventListener("click", evento => {
+    const botaoConfirmar = evento.target.closest("[data-map-confirmar]");
 
-      if (
-        id &&
-        confirm("Excluir este alerta?")
-      ) {
+    if (botaoConfirmar) {
+      confirmar(botaoConfirmar.dataset.mapConfirmar);
+      desenharMarcadores();
+      return;
+    }
 
-        excluir(id);
+    const botaoExcluir = evento.target.closest("[data-map-excluir]");
 
-        location.reload();
-      }
-    });
+    if (
+      botaoExcluir &&
+      confirm("Excluir esta ocorrência?")
+    ) {
+      excluir(botaoExcluir.dataset.mapExcluir);
+      desenharMarcadores();
+    }
+  });
+
+  desenharMarcadores();
 }
 
-// ---------- 5. QUAL PÁGINA ESTOU? ----------
+// ---------- INICIALIZAÇÃO ----------
 
-const pagina =
-  document.body.dataset.pagina;
+const paginaAtual = document.body.dataset.pagina;
 
-if (pagina === "home") {
-  iniciarHome();
-}
-
-if (pagina === "reportar") {
-  iniciarReportar();
-}
-
-if (pagina === "mapa") {
-  iniciarMapa();
-}
+if (paginaAtual === "home") iniciarHome();
+if (paginaAtual === "reportar") iniciarReportar();
+if (paginaAtual === "mapa") iniciarMapa();

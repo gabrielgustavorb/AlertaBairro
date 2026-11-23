@@ -1,19 +1,70 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mapa - AlertaBairro</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+
+  <title>Mapa — AlertaBairro</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body data-pagina="mapa">
-<div id="mapa"></div>
-<nav>
-  <a href="index.html"><span>🏠</span>Home</a>
-  <a href="mapa.html" class="atual"><span>🗺️</span>Mapa</a>
-</nav>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="script.js"></script>
+
+  <header class="topbar">
+    <div>
+      <strong class="brand">AlertaBairro</strong>
+      <small>Mapa de ocorrências</small>
+    </div>
+
+    <a class="icon-link" href="index.html" aria-label="Voltar">←</a>
+  </header>
+
+  <main class="map-page">
+
+    <div class="map-toolbar">
+
+      <select id="mapFiltroCategoria" aria-label="Filtrar por categoria">
+        <option value="todas">Todas as categorias</option>
+        <option value="Buraco">🕳️ Buraco</option>
+        <option value="Iluminação">💡 Iluminação</option>
+        <option value="Lixo">🗑️ Lixo</option>
+        <option value="Alagamento">🌧️ Alagamento</option>
+        <option value="Outro">⚠️ Outro</option>
+      </select>
+
+      <select id="mapFiltroStatus" aria-label="Filtrar por status">
+        <option value="todos">Todos os status</option>
+        <option value="Recebido">Recebido</option>
+        <option value="Em análise">Em análise</option>
+        <option value="Resolvido">Resolvido</option>
+      </select>
+
+      <button type="button" class="btn secondary" id="btnMinhaPosicao">
+        📍 Minha posição
+      </button>
+
+    </div>
+
+    <div id="mapa"></div>
+
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegação principal">
+    <a href="index.html">🏠<span>Início</span></a>
+    <a class="active" href="mapa.html">🗺️<span>Mapa</span></a>
+    <a href="reportar.html">➕<span>Reportar</span></a>
+  </nav>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="script.js"></script>
+
 </body>
 </html>

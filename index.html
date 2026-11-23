@@ -1,23 +1,70 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>AlertaBairro 🚨</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <title>AlertaBairro</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body data-pagina="home">
-<main class="tela">
-  <h1>Alerta<span>Bairro</span></h1>
-  <p class="sub">Veja o que está acontecendo na sua comunidade.</p>
-  <a class="btn" href="reportar.html" style="margin-top:24px">+ Reportar problema</a>
-  <h2>Alertas recentes</h2>
-  <div id="lista"></div>
-</main>
-<nav>
-  <a href="index.html" class="atual"><span>🏠</span>Home</a>
-  <a href="mapa.html"><span>🗺️</span>Mapa</a>
-</nav>
-<script src="script.js"></script>
+  <header class="topbar">
+    <div>
+      <strong class="brand">AlertaBairro</strong>
+      <small>Problemas da comunidade, visíveis para todos.</small>
+    </div>
+    <a class="icon-link" href="mapa.html" aria-label="Abrir mapa">🗺️</a>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div>
+        <span class="eyebrow">PARTICIPAÇÃO COMUNITÁRIA</span>
+        <h1>O que precisa de atenção no seu bairro?</h1>
+        <p>Registre problemas urbanos, localize no mapa e ajude a comunidade a confirmar o que está acontecendo.</p>
+      </div>
+      <a class="btn primary big" href="reportar.html">＋ REPORTAR PROBLEMA</a>
+    </section>
+
+    <section id="estatisticas" class="stats" aria-label="Estatísticas"></section>
+
+    <section class="section-head">
+      <div>
+        <span class="eyebrow">OCORRÊNCIAS</span>
+        <h2>Alertas da comunidade</h2>
+      </div>
+      <a class="text-link" href="mapa.html">Ver mapa →</a>
+    </section>
+
+    <section class="filters" aria-label="Filtros de ocorrências">
+      <input id="busca" type="search" placeholder="🔎 Buscar descrição ou endereço">
+
+      <select id="filtroCategoria">
+        <option value="todas">Todas as categorias</option>
+        <option value="Buraco">🕳️ Buraco</option>
+        <option value="Iluminação">💡 Iluminação</option>
+        <option value="Lixo">🗑️ Lixo</option>
+        <option value="Alagamento">🌧️ Alagamento</option>
+        <option value="Outro">⚠️ Outro</option>
+      </select>
+
+      <select id="filtroStatus">
+        <option value="todos">Todos os status</option>
+        <option value="Recebido">Recebido</option>
+        <option value="Em análise">Em análise</option>
+        <option value="Resolvido">Resolvido</option>
+      </select>
+    </section>
+
+    <section id="lista" class="grid" aria-live="polite"></section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegação principal">
+    <a class="active" href="index.html">🏠<span>Início</span></a>
+    <a href="mapa.html">🗺️<span>Mapa</span></a>
+    <a href="reportar.html">➕<span>Reportar</span></a>
+  </nav>
+
+  <script src="script.js"></script>
 </body>
 </html>
